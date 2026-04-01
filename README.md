@@ -1,11 +1,11 @@
-# Secure Model Inference with F5 Distributed Cloud API Security
+# Secure Model Inference with F5 AI Guardrails
 
-Secure AI-powered financial services applications against injection attacks, shadow APIs, and abuse while safeguarding sensitive financial data.
+Protect AI-powered applications against prompt injection, sensitive data leakage, toxic content, and off-topic misuse — securing both the prompts sent to your LLM and the responses returned to users.
 
 ## Table of contents
 
 - [Detailed description](#detailed-description)
-  - [Architecture diagrams](#architecture-diagrams)
+  - [Architecture](#architecture)
 - [Requirements](#requirements)
   - [Minimum hardware requirements](#minimum-hardware-requirements)
   - [Minimum software requirements](#minimum-software-requirements)
@@ -21,49 +21,83 @@ Secure AI-powered financial services applications against injection attacks, sha
 
 ## Detailed description
 
-Imagine a financial services team deploying an AI-powered assistant to help underwriters review policies, analyze risk documents, and answer questions about compliance guidelines. The assistant uses a large language model served on Red Hat® OpenShift® AI, with Retrieval-Augmented Generation (RAG) grounding its answers in the firm's own document corpus—underwriting manuals, regulatory filings, and internal procedures. Before moving the application to production, a compliance review reveals that the inference endpoint was configured incorrectly: a crafted prompt could trigger cross-site scripting or SQL injection, an undocumented API path may leak model metadata, and there is nothing stopping a single client from flooding the endpoint with thousands of requests.
+Imagine a financial services team deploying an AI-powered assistant to help underwriters review policies, analyze risk documents, and answer questions about compliance guidelines. The assistant uses a large language model served on Red Hat OpenShift AI, with Retrieval-Augmented Generation (RAG) grounding its answers in the firm's own document corpus — underwriting manuals, regulatory filings, and internal procedures. Before moving the application to production, a security review reveals critical AI-specific risks: a crafted prompt could trick the model into ignoring its system instructions and leaking confidential data, the model might return personally identifiable information (PII) embedded in training data, responses could contain toxic or harmful content, and nothing prevents the assistant from answering questions outside its approved domain.
 
-This AI quickstart demonstrates a solution using F5 Distributed Cloud (XC) Web App & API Protection. It deploys a complete RAG chatbot on OpenShift AI and secures the model inference endpoints. You get a working application you can demonstrate to security, compliance, and risk stakeholders—complete with simulated attack scenarios that show exactly how each protection layer responds to threats from external attackers and internal misuse alike.
+These are not traditional network-layer threats — they are AI-layer threats that operate within legitimate API calls. A WAF cannot inspect whether a model response contains a Social Security number or whether a prompt is attempting instruction injection.
 
-While the included demo content targets financial services, the same architecture applies to any industry handling sensitive data—healthcare organizations protecting patient records, government agencies securing citizen-facing AI services, or any enterprise that needs to lock down LLM endpoints before moving to production.
+This AI quickstart demonstrates a solution using **F5 AI Guardrails** (powered by Calypso AI). It deploys a complete RAG chatbot on OpenShift AI and secures the model inference endpoints with AI-aware content inspection. You get a working application you can demonstrate to security, compliance, and risk stakeholders — complete with simulated attack scenarios that show exactly how each protection layer responds.
 
-This quickstart allows you to explore security capabilities by:
+While the included demo content targets financial services, the same architecture applies to any industry handling sensitive data — healthcare organizations protecting patient records, government agencies securing citizen-facing AI services, or any enterprise that needs to enforce content safety policies on LLM endpoints before moving to production.
+
+This quickstart allows you to explore AI security capabilities by:
 
 - Querying financial documents through a RAG-powered chat assistant and seeing grounded, context-aware answers
-- Simulating XSS and SQL injection attacks against the inference endpoint, then enabling a WAF policy to block them
-- Uploading an OpenAPI specification to enforce API contracts and automatically block undocumented shadow APIs
-- Configuring rate limiting to prevent endpoint abuse and ensure fair resource allocation across clients
-- Walking through each scenario end-to-end with the included [security use case guide](docs/securing_model_inference_use_cases.md)
+- Simulating prompt injection attacks that attempt to override system instructions, then enabling a scanner policy to block them
+- Triggering responses that contain sensitive PII (SSNs, credit card numbers), then enabling PII detection to block or redact them
+- Eliciting toxic or harmful content from the model, then enabling toxicity filtering to prevent it
+- Asking off-topic questions outside the approved business domain, then enabling topic restriction to enforce boundaries
+- Walking through each scenario end-to-end with the included [AI guardrails use case guide](docs/ai_guardrails_use_cases.md)
 
 The solution is built on:
 
-- **Red Hat OpenShift AI** – MLOps platform with KServe/vLLM model serving and GPU acceleration
-- **F5 Distributed Cloud API Security** – WAF, API spec enforcement, rate limiting, and sensitive data controls
-- **LLaMA Stack + Streamlit** – RAG chatbot interface backed by PGVector for semantic document retrieval
-- **Helm-based deployment** – One-command install and teardown on any OpenShift cluster
+- **Red Hat OpenShift AI** — MLOps platform with KServe/vLLM model serving and GPU acceleration
+- **F5 AI Guardrails** — AI-layer content inspection: prompt injection detection, PII filtering, toxicity scanning, and topic enforcement
+- **LLaMA Stack + Streamlit** — RAG chatbot interface backed by PGVector for semantic document retrieval
+- **Helm-based deployment** — One-command install and teardown of the RAG stack on any OpenShift cluster
+- **Manual deployment** — Step-by-step operator installation for F5 AI Guardrails
 
-### Architecture diagrams
+### Architecture
 
-![Architecture diagram showing the RAG pipeline with F5 XC API Security protecting OpenShift AI inference endpoints](docs/images/rag-architecture_F5XC.png)
+```
+                         ┌──────────────────────────────────────────────────┐
+                         │               Red Hat OpenShift AI               │
+                         │                                                  │
+  ┌────────┐   HTTPS     │  ┌──────────────┐    ┌────────────┐             │
+  │ Client ├────────────►│  │  F5 AI       │    │ LlamaStack │             │
+  │ (Chat  │             │  │  Guardrails  ├───►│  (RAG +    ├──┐         │
+  │  UI)   │◄────────────│  │  (Moderator) │    │  Routing)  │  │         │
+  └────────┘   Response  │  └──────┬───────┘    └────────────┘  │         │
+               (pass/    │         │                             │         │
+                block)   │         │ scan                        ▼         │
+                         │  ┌──────▼───────┐    ┌────────────────────┐    │
+                         │  │   Scanner    │    │   vLLM (GPU)       │    │
+                         │  │  (Policy     │    │   Llama-3.2-1B     │    │
+                         │  │   Engine)    │    │   Instruct         │    │
+                         │  └──────────────┘    └────────────────────┘    │
+                         │                                                  │
+                         │  ┌──────────────┐    ┌────────────────────┐    │
+                         │  │  Moderator   │    │   PostgreSQL       │    │
+                         │  │  UI (:5500)  │    │   (Settings +      │    │
+                         │  │  Auth (:8080)│    │    Policies DB)    │    │
+                         │  └──────────────┘    └────────────────────┘    │
+                         │                                                  │
+                         └──────────────────────────────────────────────────┘
+```
 
-| Layer/Component | Technology | Purpose/Description |
-|-----------------|------------|---------------------|
+**Data flow:** The client sends a chat request to the F5 AI Guardrails Moderator endpoint. The Moderator passes the prompt through the Scanner, which evaluates it against active policies (prompt injection, PII, toxicity, topic). If the prompt passes, it is forwarded to LlamaStack, which routes it to the vLLM model. The model response is then scanned again on the way back. If either the prompt or response violates a policy, the request is blocked and the client receives an error.
+
+| Layer/Component | Technology | Purpose |
+|-----------------|------------|---------|
 | **Orchestration** | OpenShift AI | Container orchestration and GPU acceleration |
-| **Framework** | LLaMA Stack | Core building blocks for AI application development |
-| **UI Layer** | Streamlit | Chatbot interface for chat-based interaction |
-| **LLM** | Llama-3.2-3B-Instruct | Generates contextual responses from retrieved documents |
+| **AI Security** | F5 AI Guardrails (Moderator + Scanner) | Prompt/response inspection, policy enforcement |
+| **Framework** | LLaMA Stack | AI application building blocks, OpenAI-compatible API |
+| **UI Layer** | Streamlit | Chat interface for interactive demos |
+| **LLM** | Llama-3.2-1B-Instruct (quantized) | Generates contextual responses |
 | **Embedding** | all-MiniLM-L6-v2 | Text to vector embeddings |
 | **Vector DB** | PostgreSQL + PGVector | Stores embeddings and semantic search |
-| **Retrieval** | Vector Search | Retrieves relevant documents by similarity |
-| **Storage** | S3 Bucket | Document source for enterprise content |
+| **Policy Engine** | Calypso AI Scanner | Executes scan policies (injection, PII, toxicity, topic) |
+| **Red Team** | Calypso AI Red Team | Adversarial testing and vulnerability assessment |
+| **Database** | PostgreSQL | Stores settings, policies, and scan results |
+| **Workflow** | Prefect | Orchestrates scan and red-team jobs |
 
 ## Requirements
 
 ### Minimum hardware requirements
 
-- **LLM inference**: GPU node (e.g. NVIDIA L4 or equivalent; see Supported Models table). The 70B model requires A100 x2 or equivalent.
-- **Embedding-only**: CPU is sufficient for `all-MiniLM-L6-v2`.
-- **Cluster resources**: minimum 8 vCPUs, 32 GB RAM, 100 GB disk for model weights and vector database.
+- **GPU nodes (3x recommended):** NVIDIA A40 or equivalent with minimum 24 GB VRAM each. One GPU per scanner/red-team model — GPUs must not be shared with other workloads.
+- **CPU node:** 16 vCPUs, 32 GiB RAM, x86_64 architecture, 100 GiB persistent storage.
+- **Worker nodes (per GPU component):** 4 vCPUs, 16 GiB RAM (32 GiB recommended for Red Team), 100 GiB persistent storage.
+- **Cluster resources for RAG stack:** minimum 8 vCPUs, 32 GB RAM, 100 GB disk for model weights and vector database.
 
 ### Minimum software requirements
 
@@ -71,38 +105,39 @@ The solution is built on:
 - Red Hat OpenShift Container Platform 4.18+
 - Red Hat OpenShift AI 2.16+ (tested with 2.22)
 - Helm CLI
-- Ansible (for F5 XC deployment): `pip install ansible kubernetes`
+- F5 AI Security Operator license and registry credentials (contact [F5 Sales](https://www.f5.com/products/get-f5?ls=meta#contactsales))
 
 - Optional: [huggingface-cli](https://huggingface.co/docs/huggingface_hub/guides/cli), [Hugging Face token](https://huggingface.co/settings/tokens), [jq](https://stedolan.github.io/jq/) for example scripts
 
 ### Required user permissions
 
-- Regular user for default deployment
-- Cluster admin for advanced configurations (e.g. F5 XC integration)
+- Cluster admin for F5 AI Security Operator installation and SCC configuration
+- Regular user sufficient for RAG stack deployment
 
 
 ## Deploy
 
 ### Prerequisites
 
-- OpenShift cluster with OpenShift AI installed
+- OpenShift cluster with OpenShift AI installed and GPU nodes available
 - `oc` logged into the cluster
 - Helm installed
-- Hugging Face token and access to [Meta Llama](https://huggingface.co/meta-llama/Llama-3.2-3B-Instruct/) (and optionally [Llama Guard](https://huggingface.co/meta-llama/Llama-Guard-3-8B/) for safety)
+- F5 AI Guardrails license and container registry credentials from F5
+- Hugging Face token and access to [Meta Llama](https://huggingface.co/meta-llama/Llama-3.2-3B-Instruct/) (optional, for local model serving)
 
 ### Supported models
 
-| Function   | Model Name                             | Hardware    | AWS example      |
-|-----------|----------------------------------------|-------------|------------------|
-| Embedding | `all-MiniLM-L6-v2`                     | CPU/GPU/HPU | —                |
-| Generation| `meta-llama/Llama-3.2-3B-Instruct`     | L4/HPU      | g6.2xlarge       |
-| Generation| `meta-llama/Llama-3.1-8B-Instruct`     | L4/HPU      | g6.2xlarge       |
-| Generation| `meta-llama/Meta-Llama-3-70B-Instruct` | A100 x2/HPU | p4d.24xlarge     |
-| Safety    | `meta-llama/Llama-Guard-3-8B`          | L4/HPU      | g6.2xlarge       |
-
-The 70B model is not required for initial testing. Llama-Guard-3-8B is optional.
+| Function | Model Name | Hardware | Notes |
+|----------|------------|----------|-------|
+| Embedding | `all-MiniLM-L6-v2` | CPU/GPU/HPU | — |
+| Generation | `RedHatAI/Llama-3.2-1B-Instruct-quantized.w8a8` | 1 GPU, ~2-3 GB VRAM | Default; quantized for efficiency |
+| Generation | `meta-llama/Llama-3.2-3B-Instruct` | 1 GPU, ~6-8 GB VRAM | Full precision |
+| Scanner | `cai-phi-4` | 1 GPU, 24 GB VRAM | Policy evaluation model |
+| Red Team | `cai-mistral-nemo` | 1 GPU, 48 GB VRAM | Adversarial testing model |
 
 ### Installation steps
+
+#### Step 1: Deploy the RAG stack
 
 1. **Log in to OpenShift**
    ```bash
@@ -111,126 +146,129 @@ The 70B model is not required for initial testing. Llama-Guard-3-8B is optional.
 
 2. **Clone and go to the deployment directory**
    ```bash
-   git clone https://github.com/rh-ai-quickstart/f5-api-security.git
-   cd f5-api-security/deploy/helm
+   git clone https://github.com/rh-ai-quickstart/f5-ai-guardrails.git
+   cd f5-ai-guardrails/deploy/helm
    ```
 
 3. **Configure and deploy**
 
-   Start by creating your values file:
+   Create your values file:
    ```bash
    cp rag-values.yaml.example rag-values.yaml
    ```
 
-   Then choose **one** of the two deployment methods below and edit `rag-values.yaml` accordingly.
-
-   ---
-
-   #### Option A: Deploy models locally (GPU required)
-
-   Best when you have GPU nodes on your cluster and want to run models entirely on-premises.
-
-   In `rag-values.yaml`, enable one or more local models by setting `enabled: true`:
+   Edit `rag-values.yaml` to enable one or more models:
 
    ```yaml
    global:
      models:
-       # Quantized — 1 GPU, ~2–3 GB VRAM
+       # Quantized — 1 GPU, ~2-3 GB VRAM
        llama-3-2-1b-instruct-quantized:
          id: RedHatAI/Llama-3.2-1B-Instruct-quantized.w8a8
          enabled: true
-
-       # Full precision — 1 GPU, ~6–8 GB VRAM
-       llama-3-2-3b-instruct:
-         id: meta-llama/Llama-3.2-3B-Instruct
-         enabled: true
    ```
 
-   > **Note:** If your GPU node has a taint (e.g., `nvidia.com/gpu`), add the corresponding toleration to the model's config block. See `rag-values.yaml` for examples.
-
-   ---
-
-   #### Option B: Use a remote LLM (no local GPU required)
-
-   Best when you want to connect to an existing model server—such as an external vLLM instance, OpenAI-compatible endpoint, or another cluster's inference service—without provisioning local GPUs.
-
-   In `rag-values.yaml`, enable the remote model and supply the connection details:
-
-   ```yaml
-   global:
-     models:
-           # No local GPU required (runs on remote server)
-       remoteLLM:
-             id: <MODEL_ID>
-             url: <MODEL_SERVER_URL>
-             apiToken: <API_TOKEN>
-         enabled: true
-   ```
-
-   > **Tip:** You can combine both options—for example, run the embedding model locally while pointing the generation model at a remote server.
-
-   ---
-
-   Once your values file is ready, deploy:
+   Deploy:
    ```bash
    make install NAMESPACE=<NAMESPACE>
    ```
 
-   The Makefile validates dependencies (`helm`, `oc`), creates the namespace, and installs the Helm chart. A successful run ends with:
+   A successful run ends with:
    ```
    [SUCCESS] rag installed successfully
    ```
 
-4. **Verify (optional)**  
-   List models:
+4. **Verify the RAG stack**
    ```bash
-   curl -sS http://llamastack-<NAMESPACE>.<YOUR_OPENSHIFT_CLUSTER>.com/v1/models
-   ```
-   Test chat (LlamaStack):
-   ```bash
+   # List models
+   curl -sS http://llamastack-<NAMESPACE>.<YOUR_OPENSHIFT_CLUSTER>.com/v1/models | jq
+
+   # Test chat
    curl -sS http://llamastack-<NAMESPACE>.<YOUR_OPENSHIFT_CLUSTER>.com/v1/openai/v1/chat/completions \
      -H "Content-Type: application/json" \
-     -d '{"model": "<MODEL_ID>", "messages": [{"role": "user", "content": "Say hello in one sentence."}], "max_tokens": 64, "temperature": 0}' | jq
-   ```
-   For the secured vLLM endpoint, use your route and model ID in the same request format.
-
-5. **Deploy F5 Distributed Cloud Customer Edge**
-
-   This step deploys the F5 XC CE mesh onto the OpenShift cluster. It configures HugePages, validates storage, applies the CE manifest, and waits for all pods to register and become healthy.
-
-   ```bash
-   # Create the secrets file with your F5 XC site token and site name
-   cp deploy/ansible/group_vars/all/secrets.yml.example \
-      deploy/ansible/group_vars/all/secrets.yml
-
-   # Edit secrets.yml — set f5xc_token and f5xc_cluster_name
-   vim deploy/ansible/group_vars/all/secrets.yml
-
-   # Run the deployment
-   make f5-deploy
+     -d '{"model": "<MODEL_ID>", "messages": [{"role": "user", "content": "Say hello in one sentence."}], "max_tokens": 64}' | jq
    ```
 
-   > **Manual step required:** During deployment, the playbook will pause and display a banner asking you to approve the site in the F5 XC Console. Navigate to **Multi-Cloud Network Connect → Manage → Site Management → Registrations**, find your site, and click **Approve**. The playbook detects the approval automatically and continues.
+#### Step 2: Deploy F5 AI Guardrails
 
-6. **Next steps**
-   - [Security Use Cases and Testing](docs/securing_model_inference_use_cases.md)
+Follow the complete installation guide: **[Installing F5 AI Guardrails on OpenShift](docs/installing_f5_ai_guardrails.md)**
 
-**Application access:** Get the route with `oc get route -n <NAMESPACE>`, open the URL in a browser, and configure LLM settings (XC URL, model ID, API key) in the web UI.
+This guide covers:
+- Node Feature Discovery and GPU Operator prerequisites
+- F5 AI Security Operator installation via OperatorHub
+- SecurityOperator custom resource configuration
+- Required OpenShift SCC policies
+- Route configuration for UI access
+- Prefect Worker RBAC setup
+- LlamaStack endpoint integration
 
-### Delete
+#### Step 3: Verify the complete stack
+
+```bash
+# F5 AI Guardrails components
+oc get pods -n cai-moderator    # cai-moderator + postgres: Running
+oc get pods -n cai-scanner      # cai-scanner + model pod: Running
+oc get pods -n cai-redteam      # cai-redteam-worker + model pod: Running
+oc get pods -n prefect           # prefect-server + prefect-worker: Running
+
+# Moderator UI
+echo "https://$(oc get route cai-moderator-ui -n cai-moderator -o jsonpath='{.spec.host}')"
+```
+
+Log into the Moderator UI with the default credentials (`admin` / `pass`) and update the admin email on first login.
+
+#### Step 4: Test the secured endpoint
+
+```bash
+# Send a request through F5 AI Guardrails
+curl -sk -X POST https://<MODERATOR_HOSTNAME>/openai/llamastack/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <API_TOKEN>" \
+  -d '{
+    "model": "llama-3-2-1b-instruct-quantized/RedHatAI/Llama-3.2-1B-Instruct-quantized.w8a8",
+    "messages": [{"role": "user", "content": "say hi"}],
+    "max_tokens": 20
+  }'
+```
+
+> **Note:** Create an API token in the Moderator UI under **API tokens**. Copy it immediately — it is shown only once.
+
+#### Step 5: Run the Streamlit chat app
+
+```bash
+pip install -r requirements.txt
+streamlit run app.py
+```
+
+Opens at **http://localhost:8501**. Enter your API token and the Moderator endpoint URL in the sidebar.
+
+**Application access (frontend):** The full-featured RAG frontend is also available. Get the route with `oc get route -n <NAMESPACE>`, open the URL in a browser, and configure the LLM endpoint settings in the web UI.
+
+### Next steps
+
+- [AI Guardrails Use Cases and Testing](docs/ai_guardrails_use_cases.md)
+
+## Delete
 
 Remove the RAG stack:
 
 ```bash
-cd f5-api-security/deploy/helm
+cd deploy/helm
 make uninstall NAMESPACE=<NAMESPACE>
 ```
 
-Remove the F5 XC Customer Edge deployment:
+Remove F5 AI Guardrails (operator and all managed namespaces):
 
 ```bash
-make f5-clean                        # keeps HugePages config
-make f5-clean REMOVE_HUGEPAGES=true  # also removes HugePages, Tuned, MCP, and node label
+# Delete the SecurityOperator CR (triggers cleanup of managed namespaces)
+oc delete securityoperator security-operator-demo -n cai-moderator
+
+# Delete the operator subscription and CSV
+oc delete subscription f5-ai-security-operator -n f5-ai-sec
+oc delete csv f5-ai-security-operator.v0.4.3 -n f5-ai-sec
+
+# Delete namespaces
+oc delete project f5-ai-sec cai-moderator cai-scanner cai-redteam prefect
 ```
 
 To delete the RAG namespace entirely:
@@ -248,18 +286,18 @@ oc delete project <NAMESPACE>
   make install          # Deploy the RAG application
   make uninstall        # Remove the RAG application
   make clean            # Clean up all RAG resources including namespace
-  make f5-deploy        # Deploy F5 XC Customer Edge mesh (Ansible)
-  make f5-clean         # Remove F5 XC deployment and cluster resources
   make logs             # Show logs for all pods
   make monitor          # Monitor deployment status
   make status           # Check deployment status
   make validate-config  # Validate configuration values
   ```
 
-- [F5 Distributed Cloud](https://www.f5.com/cloud)
+- [F5 AI Guardrails (Calypso AI)](https://www.f5.com/products/ai-gateway)
+- [F5 AI Security Operator](https://www.f5.com/products/get-f5?ls=meta#contactsales)
 - [Red Hat OpenShift AI documentation](https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed)
 - [KServe](https://kserve.github.io/website/)
 - [vLLM project](https://docs.vllm.ai/)
+- [LLaMA Stack](https://github.com/meta-llama/llama-stack)
 
 ## Document management
 
@@ -269,11 +307,11 @@ Documents can be uploaded directly through the UI for RAG-based retrieval.
 - **PDF documents** — Underwriting guidelines, compliance policies, risk assessment reports
 - **Text files** — Regulatory filings, internal procedure documents
 
-Navigate to **Settings → Vector Databases** to create vector databases and upload documents.
+Navigate to **Settings → Vector Databases** in the frontend to create vector databases and upload documents.
 
 ## Tags
 
-- **Title:** Secure model inference with F5 Distributed Cloud API Security
+- **Title:** Secure model inference with F5 AI Guardrails
 - **Industry:** Banking and securities
-- **Product:** OpenShift AI, OpenShift
+- **Product:** OpenShift AI, OpenShift, F5 AI Guardrails
 - **Contributor org:** F5 / Red Hat
