@@ -187,3 +187,6 @@ deploy/helm/rag-values.yaml.old
 
 # Streamlit chat history (generated at runtime)
 chat_history.json
+
+# Presentation files
+*.pptx
