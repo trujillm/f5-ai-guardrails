@@ -144,9 +144,10 @@ The solution is built on:
          enabled: true
    ```
 
-   Deploy:
+   Set your target namespace and deploy:
    ```bash
-   make install NAMESPACE=<NAMESPACE>
+   export NAMESPACE=<NAMESPACE>   # e.g., f5-ai-security
+   make install NAMESPACE=$NAMESPACE
    ```
 
    A successful run ends with:
@@ -155,15 +156,26 @@ The solution is built on:
    ```
 
 4. **Verify the RAG stack**
-   ```bash
-   # List models
-   curl -sS http://llamastack-<NAMESPACE>.<YOUR_OPENSHIFT_CLUSTER>.com/v1/models | jq
 
-   # Test chat
-   curl -sS http://llamastack-<NAMESPACE>.<YOUR_OPENSHIFT_CLUSTER>.com/v1/openai/v1/chat/completions \
+   Get the LlamaStack route URL (uses `NAMESPACE` from the previous step):
+   ```bash
+   LLAMASTACK_URL=$(oc get route llamastack-http -n $NAMESPACE -o jsonpath='{.spec.host}')
+   echo "LlamaStack endpoint: http://$LLAMASTACK_URL"
+   ```
+
+   List available models:
+   ```bash
+   curl -sS http://$LLAMASTACK_URL/v1/models | jq
+   ```
+
+   Test chat completion:
+   ```bash
+   curl -sS http://$LLAMASTACK_URL/v1/openai/v1/chat/completions \
      -H "Content-Type: application/json" \
      -d '{"model": "<MODEL_ID>", "messages": [{"role": "user", "content": "Say hello in one sentence."}], "max_tokens": 64}' | jq
    ```
+
+   Replace `<MODEL_ID>` with the model identifier from the list models output (e.g., `llama-3-2-1b-instruct-quantized/RedHatAI/Llama-3.2-1B-Instruct-quantized.w8a8`).
 
 #### Step 2: Deploy F5 AI Guardrails
 
@@ -219,6 +231,40 @@ streamlit run app.py
 Opens at **http://localhost:8501**. Enter your API token and the Moderator endpoint URL in the sidebar.
 
 **Application access (frontend):** The full-featured RAG frontend is also available. Get the route with `oc get route -n <NAMESPACE>`, open the URL in a browser, and configure the LLM endpoint settings in the web UI.
+
+#### Step 6 (optional): Run the full-featured RAG frontend locally
+
+The `frontend/` directory contains a full-featured LlamaStack UI with RAG document management, model selection, and sampling parameters.
+
+**Prerequisites:**
+- Python 3.12+
+- [uv](https://docs.astral.sh/uv/getting-started/installation/) package manager
+
+**Setup and run:**
+
+```bash
+cd frontend
+
+# Replace the version placeholder in pyproject.toml (required for local dev)
+sed -i '' 's/__LLAMASTACK_VERSION__/0.2.23/g' pyproject.toml   # macOS
+# sed -i 's/__LLAMASTACK_VERSION__/0.2.23/g' pyproject.toml    # Linux
+
+# Install dependencies
+uv sync
+
+# Run the app
+uv run streamlit run llama_stack_ui/distribution/ui/app.py --server.port=8501
+```
+
+Opens at **http://localhost:8501**. Configure the LLM endpoint in **Settings** within the app.
+
+> **Note:** The `pyproject.toml` uses `__LLAMASTACK_VERSION__` as a placeholder that is normally substituted during container builds (see `Containerfile`). For local development, you must replace it manually with the target version (currently `0.2.23`). Do not commit this change — it will break the container build pipeline.
+
+**Features:**
+- **Chat** — Multi-turn conversation with model selection, system prompt, and sampling parameters (temperature, top_p, max_tokens)
+- **Settings** — View available models and vector databases
+- **RAG** — Upload documents, create vector database collections, and query with retrieval-augmented generation
+- **Agent/Direct modes** — Switch between direct model inference and agent-based RAG with MCP tool support
 
 ### Next steps
 
