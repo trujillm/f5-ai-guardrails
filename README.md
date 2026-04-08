@@ -246,18 +246,31 @@ The `frontend/` directory contains a full-featured LlamaStack UI with RAG docume
 
 ```bash
 cd frontend
-./start.sh
+LLAMA_STACK_ENDPOINT=http://$LLAMASTACK_URL ./start.sh
 ```
 
-Opens at **http://localhost:8501**. Configure the LLM endpoint in **Settings** within the app.
+The `start.sh` script handles virtual environment setup (`uv sync`), dependency installation, and launching Streamlit. If `LLAMA_STACK_ENDPOINT` is not set, the script auto-detects the LlamaStack route from OpenShift (requires `oc` login).
+
+Opens at **http://localhost:8501**.
+
+**Configuring F5 AI Guardrails (optional):**
+
+To route chat through F5 AI Guardrails for policy scanning, go to **Settings** in the app and configure:
+
+| Field | Value |
+|-------|-------|
+| **Endpoint URL** | `https://<MODERATOR_HOSTNAME>/openai/llamastack` |
+| **API Token** | Bearer token from the Moderator UI (**API tokens** page) |
+
+When both fields are set, chat requests are routed through the guardrail proxy. Models and vector databases are always fetched from the direct LlamaStack endpoint.
 
 > **Note:** The `pyproject.toml` uses `__LLAMASTACK_VERSION__` as a placeholder that is normally substituted during container builds (see `Containerfile`). For local development, you must replace it manually with the target version (currently `0.2.23`). Do not commit this change — it will break the container build pipeline.
 
 **Features:**
 - **Chat** — Multi-turn conversation with model selection, system prompt, and sampling parameters (temperature, top_p, max_tokens)
-- **Settings** — View available models and vector databases
+- **Settings** — Configure optional F5 AI Guardrails endpoint and API token for policy scanning
 - **RAG** — Upload documents, create vector database collections, and query with retrieval-augmented generation
-- **Agent/Direct modes** — Switch between direct model inference and agent-based RAG with MCP tool support
+- **Direct/Guardrail modes** — Chat directly with LlamaStack or route through F5 AI Guardrails for prompt injection, PII, toxicity, and topic enforcement
 
 ### Next steps
 

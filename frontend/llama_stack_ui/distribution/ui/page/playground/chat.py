@@ -88,31 +88,25 @@ def render_history(tool_debug):
 def tool_chat_page():
     st.title("💬 Chat")
 
-    # Get models from XC URL if configured, otherwise use default endpoint
+    # Get models from session state (fetched in Settings) or default endpoint
     def get_available_models():
-        # Check if XC URL is configured in session state
-        if "xc_url" in st.session_state and "models_list" in st.session_state and st.session_state["models_list"]:
-            # Use models from XC URL (same as Models tab)
+        if "models_list" in st.session_state and st.session_state["models_list"]:
             models_list = st.session_state["models_list"]
-            # Filter to only LLM models
             llm_models = [model for model in models_list if hasattr(model, 'api_model_type') and model.api_model_type == "llm"]
             return [model.identifier for model in llm_models]
         else:
-            # Fallback to default endpoint
-            client = llama_stack_api.client
-            models = client.models.list()
+            models = llama_stack_api.client.models.list()
             return [model.identifier for model in models if model.api_model_type == "llm"]
-    
+
     model_list = get_available_models()
 
-    # Determine which client to use based on XC URL configuration
-    if "xc_url" in st.session_state and st.session_state.get("xc_url"):
-        # Use XC URL client for all operations
-        xc_url = st.session_state["xc_url"]
-        client = llama_stack_api.create_client_with_url(xc_url)
-    else:
-        # Use default endpoint client
-        client = llama_stack_api.client
+    # LlamaStack client for API operations (vector DBs, tool groups)
+    client = llama_stack_api.client
+
+    # Chat routing: use OpenAI client for guardrail endpoint, LlamaStack client otherwise
+    guardrail_url = st.session_state.get("guardrail_url", "")
+    api_token = st.session_state.get("api_token", "")
+    use_guardrail = bool(guardrail_url and api_token)
     
     tool_groups = client.toolgroups.list()
     tool_groups_list = [tool_group.identifier for tool_group in tool_groups]
@@ -137,8 +131,7 @@ def tool_chat_page():
         toolgroup_selection = ["builtin::rag"]
         
         # Document Collections selection - single, clean selector
-        # Always fetch vector DBs from local endpoint (pgvector is local, not on XC)
-        vector_dbs = llama_stack_api.client.vector_dbs.list() or []
+        vector_dbs = client.vector_dbs.list() or []
         if not vector_dbs:
             st.info("No vector databases available for selection.")
         vector_db_names = [get_vector_db_name(vector_db) for vector_db in vector_dbs]
@@ -556,34 +549,50 @@ def tool_chat_page():
             else:
                 extended_prompt = f"Please answer the following query. \n\nQUERY:\n{prompt}"
 
-            # Run inference directly using the configured client (XC URL or default)
-            #st.session_state.messages.append({"role": "user", "content": extended_prompt})
-            messages_for_direct_api = (
+            messages_for_api = (
                 [{'role': 'system', 'content': system_prompt}] +
                 [{'role': 'user', 'content': extended_prompt}]
             )
-            response = inference_client.inference.chat_completion(
-                messages=messages_for_direct_api,
-                model_id=model,
-                sampling_params={
-                    "strategy": get_strategy(temperature, top_p),
-                    "max_tokens": max_tokens,
-                    "repetition_penalty": repetition_penalty,
-                },
-                stream=True,
-                timeout=120,
-            )
 
-            # Display assistant response
-            for chunk in response:
-                if chunk.event:
-                    response_delta = chunk.event.delta
-                    if isinstance(response_delta, ToolCallDelta):
-                        retrieval_response += response_delta.tool_call.replace("====", "").strip()
-                        #retrieval_message_placeholder.info(retrieval_response)
-                    else:
-                        full_response += chunk.event.delta.text
-                        message_placeholder.markdown(full_response + "▌")
+            if use_guardrail:
+                # Use OpenAI client for F5 AI Guardrails endpoint
+                openai_client = llama_stack_api.create_openai_client(
+                    guardrail_url.strip(), api_token.strip()
+                )
+                try:
+                    response = openai_client.chat.completions.create(
+                        model=model,
+                        messages=messages_for_api,
+                        max_tokens=max_tokens,
+                        temperature=temperature,
+                        top_p=top_p,
+                    )
+                    full_response = response.choices[0].message.content or ""
+                except Exception as e:
+                    st.error(f"Guardrail endpoint error ({guardrail_url}): {e}")
+                    return
+            else:
+                # Use LlamaStack client for direct endpoint
+                response = inference_client.inference.chat_completion(
+                    messages=messages_for_api,
+                    model_id=model,
+                    sampling_params={
+                        "strategy": get_strategy(temperature, top_p),
+                        "max_tokens": max_tokens,
+                        "repetition_penalty": repetition_penalty,
+                    },
+                    stream=True,
+                    timeout=120,
+                )
+                for chunk in response:
+                    if chunk.event:
+                        response_delta = chunk.event.delta
+                        if isinstance(response_delta, ToolCallDelta):
+                            retrieval_response += response_delta.tool_call.replace("====", "").strip()
+                        else:
+                            full_response += chunk.event.delta.text
+                            message_placeholder.markdown(full_response + "▌")
+
             message_placeholder.markdown(full_response)
 
         response_dict = {"role": "assistant", "content": full_response, "stop_reason": "end_of_message"}

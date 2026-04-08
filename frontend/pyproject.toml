@@ -16,6 +16,8 @@ dependencies = [
     "llama-stack==0.2.23",
     "fire",
     "asyncpg",
+    "openai",
+    "httpx",
 ]
 
 [tool.setuptools]

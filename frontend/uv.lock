@@ -930,8 +930,10 @@ source = { editable = "." }
 dependencies = [
     { name = "asyncpg" },
     { name = "fire" },
+    { name = "httpx" },
     { name = "llama-stack" },
     { name = "llama-stack-client" },
+    { name = "openai" },
     { name = "pandas" },
     { name = "requests" },
     { name = "streamlit" },
@@ -942,8 +944,10 @@ dependencies = [
 requires-dist = [
     { name = "asyncpg" },
     { name = "fire" },
+    { name = "httpx" },
     { name = "llama-stack", specifier = "==0.2.23" },
     { name = "llama-stack-client", specifier = "==0.2.23" },
+    { name = "openai" },
     { name = "pandas" },
     { name = "requests" },
     { name = "streamlit" },

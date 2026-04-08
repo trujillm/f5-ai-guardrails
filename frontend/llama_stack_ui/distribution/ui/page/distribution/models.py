@@ -10,41 +10,43 @@ import streamlit as st
 from llama_stack_ui.distribution.ui.modules.api import llama_stack_api
 
 
-def fetch_models_from_xc_url():
-    """Fetch models from the XC URL and update session state"""
-    xc_url = st.session_state.get("xc_url", "http://llamastack:8321")
-    
-    # Set loading state
+def fetch_models():
+    """Fetch models from the default LlamaStack endpoint and update session state"""
     st.session_state["models_loading"] = True
     st.session_state["models_error"] = None
     st.session_state["models_list"] = []
-    
-    # Fetch models from XC URL
-    success, models_list, error_message = llama_stack_api.fetch_models_from_url(xc_url)
-    
-    # Update session state based on results
-    st.session_state["models_loading"] = False
-    
-    if success and models_list:
-        st.session_state["models_list"] = models_list
-        st.session_state["models_error"] = None
-        st.session_state["connection_status"] = "success"
-    else:
+
+    try:
+        models_list = llama_stack_api.client.models.list()
+        st.session_state["models_loading"] = False
+        if models_list:
+            st.session_state["models_list"] = models_list
+            st.session_state["models_error"] = None
+            st.session_state["connection_status"] = "success"
+        else:
+            st.session_state["models_list"] = []
+            st.session_state["models_error"] = "No models returned from LlamaStack"
+            st.session_state["connection_status"] = "error"
+    except Exception as e:
+        st.session_state["models_loading"] = False
         st.session_state["models_list"] = []
-        st.session_state["models_error"] = error_message or "Failed to fetch models"
+        st.session_state["models_error"] = f"Connection failed: {type(e).__name__}: {e}"
         st.session_state["connection_status"] = "error"
 
 
 def models():
     """
-    Inspect available models and display details for a selected one.
-    Now supports dynamic XC URL configuration.
+    Configure F5 AI Guardrails endpoint and inspect available models.
+    Models are fetched from the default LlamaStack endpoint.
+    Chat is routed through the guardrail proxy when configured.
     """
-    st.header("Models")
-    
+    st.header("Settings")
+
     # Initialize session state
-    if "xc_url" not in st.session_state:
-        st.session_state["xc_url"] = "http://llamastack:8321"
+    if "guardrail_url" not in st.session_state:
+        st.session_state["guardrail_url"] = ""
+    if "api_token" not in st.session_state:
+        st.session_state["api_token"] = ""
     if "models_list" not in st.session_state:
         st.session_state["models_list"] = []
     if "models_loading" not in st.session_state:
@@ -55,87 +57,70 @@ def models():
         st.session_state["connection_status"] = None
     if "models_fetched" not in st.session_state:
         st.session_state["models_fetched"] = False
-    if "previous_xc_url" not in st.session_state:
-        st.session_state["previous_xc_url"] = st.session_state["xc_url"]
 
-    # XC URL input field
-    xc_url = st.text_input(
-        "XC URL",
-        value=st.session_state["xc_url"],
-        help="Enter the LlamaStack endpoint URL to fetch models from",
-        key="xc_url_input",
-        on_change=lambda: st.session_state.update({"models_fetched": False})
+    # --- F5 AI Guardrails ---
+    st.subheader("F5 AI Guardrails")
+    st.caption("When configured, chat requests are routed through the guardrail proxy for policy scanning.")
+
+    guardrail_url = st.text_input(
+        "Endpoint URL",
+        value=st.session_state["guardrail_url"],
+        help="F5 AI Guardrails moderator endpoint (e.g., https://aisec.example.com/openai/llamastack). Leave empty to chat directly with LlamaStack.",
+        key="guardrail_url_input",
     )
-    
-    # Check if URL actually changed (not just initial load)
-    url_changed = xc_url != st.session_state["previous_xc_url"]
-    
-    # Update session state if URL changed
-    if xc_url != st.session_state["xc_url"]:
-        st.session_state["xc_url"] = xc_url
-        st.session_state["models_fetched"] = False
-    
-    # Auto-fetch models when URL changes or on first load
-    if not st.session_state["models_fetched"] and xc_url and not st.session_state["models_loading"]:
-        with st.spinner("🔄 Fetching models from XC URL..."):
-            fetch_models_from_xc_url()
+
+    api_token = st.text_input(
+        "API Token",
+        value=st.session_state["api_token"],
+        type="password",
+        help="Bearer token for the Guardrail endpoint. Create one in the Moderator UI under API tokens.",
+        key="api_token_input",
+    )
+
+    # Update session state
+    if guardrail_url != st.session_state["guardrail_url"]:
+        st.session_state["guardrail_url"] = guardrail_url
+    if api_token != st.session_state["api_token"]:
+        st.session_state["api_token"] = api_token
+
+    # Auto-fetch models on first load
+    if not st.session_state["models_fetched"] and not st.session_state["models_loading"]:
+        with st.spinner("Fetching models from LlamaStack..."):
+            fetch_models()
         st.session_state["models_fetched"] = True
-        st.session_state["previous_xc_url"] = xc_url
-        # Only show the connection status message if URL was explicitly changed
-        if url_changed:
-            st.session_state["show_connection_status"] = True
         st.rerun()
-    
-    # Display connection status only once after a fetch operation
-    if st.session_state.get("show_connection_status", False):
-        if st.session_state["connection_status"] == "success":
-            st.success("✅ Connected to LlamaStack endpoint")
-        elif st.session_state["connection_status"] == "error" and st.session_state["models_error"]:
-            st.error(f"❌ {st.session_state['models_error']}")
-        # Clear the flag so message doesn't show on subsequent visits
-        st.session_state["show_connection_status"] = False
-    
-    # Show loading state
+
     if st.session_state["models_loading"]:
-        st.info("🔄 Fetching models from XC URL...")
+        st.info("Fetching models...")
         return
-    
-    # Display models section
+
+    # Display models
     st.subheader("Available Models")
-    
+
     models_list = st.session_state["models_list"]
-    
+
     if not models_list and st.session_state["models_error"]:
-        st.info("No models available. Please check your XC URL configuration.")
+        st.error(f"{st.session_state['models_error']}")
         return
-    elif not models_list:
-        # Fallback to default endpoint for backward compatibility
-        try:
-            models_list = llama_stack_api.client.models.list()
-            if models_list:
-                st.info("Using default endpoint. Configure XC URL above to use a different LlamaStack instance.")
-        except Exception:
-            st.info("No models available. Please configure a valid XC URL.")
-            return
-    
+
     if not models_list:
         st.info("No models available.")
         return
 
-    # Filter models to only include LLM models (exclude embedding models, etc.)
     llm_models = [model for model in models_list if hasattr(model, 'api_model_type') and model.api_model_type == "llm"]
-    
+
     if not llm_models:
         st.info("No LLM models available from this endpoint.")
         return
 
-    # Display models in a table with single column
-    # Create DataFrame with model identifiers
     models_data = [{"Model Identifier": model.identifier} for model in llm_models]
     df = pd.DataFrame(models_data)
-    
-    # Add row numbering starting from 1
     df.index = df.index + 1
-    
-    # Display the table
     st.dataframe(df, use_container_width=True, hide_index=False)
+
+    # Chat routing status
+    st.subheader("Chat Routing")
+    if st.session_state["guardrail_url"] and st.session_state["api_token"]:
+        st.success(f"Chat routed through F5 AI Guardrails: {st.session_state['guardrail_url']}")
+    else:
+        st.info("Chat goes directly to LlamaStack (no guardrail scanning).")
