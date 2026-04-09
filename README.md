@@ -14,6 +14,8 @@ Protect AI-powered applications against prompt injection, sensitive data leakage
   - [Prerequisites](#prerequisites)
   - [Supported models](#supported-models)
   - [Installation steps](#installation-steps)
+  - [What you can protect against](#what-you-can-protect-against)
+  - [Hands-on labs](#hands-on-labs)
 - [Delete](#delete)
 - [References](#references)
 - [Document management](#document-management)
@@ -272,9 +274,30 @@ When both fields are set, chat requests are routed through the guardrail proxy. 
 - **RAG** — Upload documents, create vector database collections, and query with retrieval-augmented generation
 - **Direct/Guardrail modes** — Chat directly with LlamaStack or route through F5 AI Guardrails for prompt injection, PII, toxicity, and topic enforcement
 
-### Next steps
+### What you can protect against
 
-- [AI Guardrails Use Cases and Testing](docs/ai_guardrails_use_cases.md)
+Once deployed, F5 AI Guardrails provides defense-in-depth across multiple AI threat categories. The table below highlights the key protection capabilities — each can be tested interactively using the included labs.
+
+| Threat Category | What it catches | Scanner Type |
+|-----------------|----------------|--------------|
+| **Prompt Injection & Jailbreak** | Instruction-override attacks, DAN prompts, system prompt extraction, obfuscation | OOTB — Prompt Injection package |
+| **PII & Data Leakage** | SSNs, credit cards, emails, phone numbers, data exfiltration requests | OOTB — PII package |
+| **EU AI Act Compliance** | Subliminal manipulation, biometric surveillance, emotion recognition in employment | OOTB — EU AI Act package |
+| **Restricted Topics** | Unauthorized financial advice, medical diagnosis, legal guidance | OOTB — Restricted Topics package |
+| **Custom Business Policies** | Organization-specific content (e.g., internal financial forecasts, competitor mentions) | Custom — GenAI scanner |
+| **Confidential Terms** | Project code names, internal identifiers, classified terminology | Custom — Keyword scanner |
+| **Structured Data Patterns** | Employee IDs, internal account numbers, custom PII formats | Custom — RegEx scanner |
+
+Each scanner operates in one of three modes: **Block** (reject the request), **Audit** (flag for review), or **Redact** (mask sensitive data and continue).
+
+### Hands-on labs
+
+The **[AI Guardrails Use Case Guide](docs/ai_guardrails_use_cases.md)** provides step-by-step labs to configure, test, and observe these protections in action:
+
+- **Lab 1 — Prompt and Response Scanning:** Add OOTB scanner packages, test safe and unsafe prompts, and observe blocked events in the Logs dashboard
+- **Lab 2 — Creating Custom Scanners:** Build GenAI, Keyword, and RegEx scanners tailored to your organization's policies, then verify they block matching content
+
+The labs use both the Streamlit chat app and the Moderator UI, with optional `curl` commands for scripted testing. The use case guide is updated as new scanner capabilities are released.
 
 ## Delete
 
