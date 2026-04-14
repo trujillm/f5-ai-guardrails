@@ -375,6 +375,18 @@ To change a guardrail's mode:
 
 > **Tip:** Start with **Audit** mode during initial deployment to understand what the guardrail catches. Once you are confident in the detection accuracy, switch to **Block** mode for enforcement. Use **Redact** mode for PII guardrails where you want to allow the conversation to continue with sensitive data masked.
 
+### Lab 2 recap
+
+At this point you have created and enabled three custom guardrails:
+
+| Guardrail | Type | What it catches |
+|-----------|------|-----------------|
+| Internal Financial Forecast | GenAI | Any mention of financial forecasts or budget data |
+| Confidential Project Names | Keyword | `Project Phoenix`, `Project Titan`, `Operation Bluebird` |
+| Internal Employee ID | Regex | Strings matching `EMP-\d{6}` (e.g., `EMP-284759`) |
+
+Combined with the four OOTB packages from Lab 1 (Prompt Injection, PII, Restricted Topics, EU AI Act), your project now has **defense-in-depth coverage** across prompt injection, data leakage, compliance, restricted topics, and organization-specific policies.
+
 ---
 
 ## Optional: Testing with curl
