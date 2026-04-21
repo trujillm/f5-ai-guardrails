@@ -268,7 +268,7 @@ After completing the [AI Guardrails Use Case Guide](docs/ai_guardrails_use_cases
 
 When both fields are set, chat requests are routed through the guardrail proxy. Models and vector databases are always fetched from the direct LlamaStack endpoint.
 
-> **Note:** The `pyproject.toml` uses `__LLAMASTACK_VERSION__` as a placeholder that is normally substituted during container builds (see `Containerfile`). For local development, you must replace it manually with the target version (currently `0.2.23`). Do not commit this change — it will break the container build pipeline.
+> **Note:** The `pyproject.toml` uses `__LLAMASTACK_VERSION__` as a placeholder that is normally substituted during container builds (see `Containerfile`). For local development, you must replace it manually with the target version (currently `0.6.0`). Do not commit this change — it will break the container build pipeline.
 
 **Features:**
 - **Chat** — Multi-turn conversation with model selection, system prompt, and sampling parameters (temperature, top_p, max_tokens)
