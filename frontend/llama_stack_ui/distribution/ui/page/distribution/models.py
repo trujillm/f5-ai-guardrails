@@ -69,35 +69,33 @@ def models():
     st.subheader("🛡️ F5 AI Guardrails")
     st.caption("When both fields are set, chat is scanned by your F5 AI Guardrails policies.")
 
-    guardrail_url = st.text_input(
+    # Bind widgets to the same keys as hydration (`app._init_guardrails_from_persisted`).
+    # Do not use separate widget keys + copy from return values: password inputs can
+    # return "" on early frames and would overwrite a file-loaded token and corrupt JSON.
+    st.text_input(
         "Endpoint URL",
-        value=st.session_state["guardrail_url"],
         help="F5 AI Guardrails moderator endpoint (e.g., https://aisec.example.com/openai/llamastack). "
-             "Also seedable via F5_GUARDRAIL_URL env var.",
-        key="guardrail_url_input",
-    )
-    api_token = st.text_input(
-        "API Token",
-        value=st.session_state["api_token"],
-        type="password",
-        help="Bearer token for the Guardrail endpoint. "
-             "Also seedable via F5_GUARDRAIL_API_TOKEN env var.",
-        key="api_token_input",
+             "Leave empty to chat directly with LlamaStack. Also seedable via F5_GUARDRAIL_URL env var.",
+        key="guardrail_url",
     )
 
-    # Update session state and persist
-    changed = False
-    if guardrail_url != st.session_state["guardrail_url"]:
-        st.session_state["guardrail_url"] = guardrail_url
-        changed = True
-    if api_token != st.session_state["api_token"]:
-        st.session_state["api_token"] = api_token
-        changed = True
-    if changed:
-        try:
-            write_state(st.session_state["guardrail_url"], st.session_state["api_token"])
-        except OSError:
-            pass
+    st.text_input(
+        "API Token",
+        type="password",
+        help="Bearer token for the Guardrail endpoint. Create one in the Moderator UI under API tokens. "
+             "Also seedable via F5_GUARDRAIL_API_TOKEN env var.",
+        key="api_token",
+    )
+
+    try:
+        write_state(
+            st.session_state.get("guardrail_url", "") or "",
+            st.session_state.get("api_token", "") or "",
+        )
+    except OSError as e:
+        if not st.session_state.get("_guardrails_write_error_shown"):
+            st.session_state["_guardrails_write_error_shown"] = True
+            st.warning(f"Could not save guardrail settings to disk: {e}")
 
     # ------------------------------------------------------------------
     # LlamaStack Endpoint
