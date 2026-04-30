@@ -11,7 +11,8 @@ Common failure patterns and fixes encountered during installation and operation.
 | 3 | UI loads blank or black page | Missing `/auth` route | [Step 4](installing_f5_ai_guardrails.md#step-4-route-configuration) |
 | 4 | Operator stuck in `Installing` / controller-manager CrashLoopBackOff | Missing SCC permissions for operator SA | [Fix 4](#fix-4-operator-scc-permissions) |
 | 5 | controller-manager OOMKilled | Default 128Mi memory limit insufficient | [Fix 5](#fix-5-controller-manager-oomkilled) |
-| 6 | "Invalid License" after reinstall | Encryption key mismatch in settings table | [Fix 6](#fix-6-invalid-license-after-reinstall) |
+| 6 | "Invalid License" after reinstall (decrypt errors in logs) | Encryption key mismatch in settings table | [Fix 6](#fix-6-invalid-license-after-reinstall) |
+| 9 | "Invalid License" with stale license in DB (no decrypt errors) | Old/wrong license stored in DB takes precedence over YAML default | [Fix 9](#fix-9-invalid-license-with-stale-license-in-db) |
 | 7 | "Internal error" / Keycloak 400 after node outage | PostgreSQL connection pool exhaustion | [Fix 7](#fix-7-keycloak-400--connection-pool-exhaustion) |
 | 8 | Inference pods crash with `Permission denied` | Missing `anyuid` SCC on inference SAs | [Fix 8](#fix-8-inference-pods-permission-denied) |
 
@@ -89,3 +90,29 @@ oc adm policy add-scc-to-user anyuid -z f5-ai-sec-inference -n f5-ai-sec-inferen
 oc adm policy add-scc-to-user anyuid -z f5-ai-sec-inference-models -n f5-ai-sec-inference
 oc delete pods -n f5-ai-sec-inference --all
 ```
+
+### Fix 9: "Invalid License" with stale license in DB
+
+UI shows "Invalid License" but moderator logs have **no** `decrypt` errors. An old or wrong license was saved to the DB before the correct one was set in `CAI_MODERATOR_DEFAULT_LICENSE`. Once a value exists in the DB, it takes precedence over the YAML default.
+
+**Option A — API** (if you can obtain a Bearer token):
+
+```bash
+curl -sk -X PATCH \
+  'https://<moderator-hostname>/backend/v1/license' \
+  -H 'accept: application/json' \
+  -H 'Authorization: Bearer <TOKEN>' \
+  -H 'Content-Type: application/json' \
+  --json '{ "license": "<NEW_LICENSE>" }'
+```
+
+**Option B — direct DB update** (if login is blocked by the license error):
+
+```bash
+oc exec -n cai-moderator cai-moderator-postgres-cai-postgresql-0 -- \
+  psql -U postgres -d moderator -c \
+  "UPDATE setting SET value = '\"<NEW_LICENSE>\"' WHERE name = 'org.license';"
+oc rollout restart deployment/cai-moderator -n cai-moderator
+```
+
+> **Note:** The value must be wrapped in `'"..."'` (JSON-encoded string). Unlike Fix 6, no other tables need clearing — providers and API tokens remain intact.

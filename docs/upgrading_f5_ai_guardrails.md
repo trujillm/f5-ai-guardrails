@@ -407,9 +407,9 @@ If your repository has a `CLAUDE.md` referencing operator version or namespace l
 
 ## Troubleshooting
 
-### Invalid License after upgrade
+### Invalid License after upgrade (encryption key changed)
 
-**Symptom:** UI shows "Invalid License — No valid license found."
+**Symptom:** UI shows "Invalid License — No valid license found." Moderator logs show `decrypt` errors.
 
 **Cause:** The moderator encryption key changed during reinstall. The `setting`, `secret`, and `secret_config` tables hold data encrypted with the old key.
 
@@ -422,6 +422,34 @@ oc rollout restart deployment/cai-moderator -n cai-moderator
 ```
 
 > **Note:** After this, re-add providers in the UI, assign them to your project, and create new API tokens.
+
+### Invalid License with stale license in DB (no decrypt errors)
+
+**Symptom:** UI shows "Invalid License — No valid license found." Moderator logs have **no** `decrypt` errors.
+
+**Cause:** An old or wrong license was stored in the `org.license` row of the `setting` table before the correct license was set in `CAI_MODERATOR_DEFAULT_LICENSE`. Once a value exists in the DB, it takes precedence over the YAML default.
+
+**Fix (Option A — API):**
+
+```bash
+curl -sk -X PATCH \
+  'https://<moderator-hostname>/backend/v1/license' \
+  -H 'accept: application/json' \
+  -H 'Authorization: Bearer <TOKEN>' \
+  -H 'Content-Type: application/json' \
+  --json '{ "license": "<NEW_LICENSE>" }'
+```
+
+**Fix (Option B — direct DB update):** If login is blocked by the license error:
+
+```bash
+oc exec -n cai-moderator cai-moderator-postgres-cai-postgresql-0 -- \
+  psql -U postgres -d moderator -c \
+  "UPDATE setting SET value = '\"<NEW_LICENSE>\"' WHERE name = 'org.license';"
+oc rollout restart deployment/cai-moderator -n cai-moderator
+```
+
+> **Note:** The value must be JSON-encoded (`'"..."'`). Providers and API tokens remain intact — no need to clear other tables.
 
 ### Inference pods: Permission denied
 
