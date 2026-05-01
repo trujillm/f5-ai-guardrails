@@ -207,7 +207,7 @@ if prompt := st.chat_input("Type message here..."):
     except Exception as e:
         body = getattr(getattr(e, "response", None), "json", lambda: {})()
         if body.get("error", {}).get("cai_error", {}).get("outcome") == "blocked":
-            st.session_state.messages[-1] = {"role": "blocked", "time": time_str}
+            st.session_state.messages.append({"role": "blocked", "time": time_str})
         else:
             st.session_state.messages.pop()
             st.error(f"Error: {e}")
